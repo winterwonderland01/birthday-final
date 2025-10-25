@@ -7,6 +7,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const yesBtn = document.getElementById('yesBtn');
   const noBtn = document.getElementById('noBtn');
 
+  // Keep track of timeouts/intervals from typing so we can cancel them
+  let typingTimeouts = [];
+  function clearTyping() {
+    typingTimeouts.forEach(id => clearTimeout(id));
+    typingTimeouts = [];
+  }
+
   // floating hearts
   for (let i = 0; i < 18; i++) {
     const heart = document.createElement('div');
@@ -20,14 +27,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Typewriter effect for front page headline
   const frontText = document.querySelector('#front-page h1');
-  const frontContent = frontText.textContent;
-  frontText.textContent = '';
-  let idx = 0;
-  const frontInterval = setInterval(() => {
-    frontText.textContent += frontContent.charAt(idx);
-    idx++;
-    if (idx >= frontContent.length) clearInterval(frontInterval);
-  }, 50);
+  const frontContent = frontText ? frontText.textContent : '';
+  if (frontText) {
+    frontText.textContent = '';
+    let idx = 0;
+    const frontInterval = setInterval(() => {
+      frontText.textContent += frontContent.charAt(idx);
+      idx++;
+      if (idx >= frontContent.length) clearInterval(frontInterval);
+    }, 50);
+  }
 
   // Random floating mini hearts in main content
   setInterval(() => {
@@ -55,44 +64,89 @@ document.addEventListener('DOMContentLoaded', () => {
     alert("Awww... okay maybe later 😢");
   });
 
-  // Envelope click flap + popup
- envelope.addEventListener('click', () => {
-  envelope.querySelector('.flap').classList.add('open');
-  overlay.classList.add('show');
-  popup.classList.add('show');
+  // Utility: open popup
+  function openPopup() {
+    const flap = envelope.querySelector('.flap');
 
-  document.body.style.overflow = 'auto';
+    // If already showing, do nothing
+    if (popup.classList.contains('show')) return;
 
-  const paragraphs = popup.querySelectorAll('.popup-para');
-  paragraphs.forEach(p => p.textContent = ''); // clear initial text
+    // Ensure popup responds to pointer events
+    popup.style.pointerEvents = 'auto';
 
-  let delay = 0;
-  paragraphs.forEach((p) => {
-    const fullText = p.dataset.text; // read from data-text
-    let i = 0;
-    const interval = () => {
-      if (i < fullText.length) {
-        p.textContent += fullText.charAt(i);
-        i++;
-        setTimeout(interval, 15);
-      }
-    };
-    setTimeout(interval, delay);
-    delay += fullText.length * 15 + 300; // stagger next paragraph
-  });
+    flap.classList.add('open');
+    overlay.classList.add('show');
+    popup.classList.add('show');
 
-  spawnConfetti(80);
-});
+    // Prevent background scroll while popup is open
+    document.body.style.overflow = 'hidden';
 
+    // Typing animation - clear any previous typing first
+    clearTyping();
+    const paragraphs = popup.querySelectorAll('.popup-para');
+    paragraphs.forEach(p => p.textContent = '');
 
-  // Close popup
-  overlay.addEventListener('click', () => {
-    envelope.querySelector('.flap').classList.remove('open');
+    // Stagger typing for each paragraph, but keep references to timeouts
+    let delay = 0;
+    paragraphs.forEach((p) => {
+      const fullText = p.dataset.text || '';
+      let i = 0;
+      const typeStep = () => {
+        if (i < fullText.length && popup.classList.contains('show')) {
+          p.textContent += fullText.charAt(i);
+          i++;
+          const t = setTimeout(typeStep, 15);
+          typingTimeouts.push(t);
+        }
+      };
+      const tStart = setTimeout(typeStep, delay);
+      typingTimeouts.push(tStart);
+      delay += Math.max(300, fullText.length * 15) + 100;
+    });
+
+    spawnConfetti(80);
+  }
+
+  // Utility: close popup
+  function closePopup() {
+    const flap = envelope.querySelector('.flap');
+
+    // Hide popup and overlay immediately
     overlay.classList.remove('show');
     popup.classList.remove('show');
 
-    // Enable page scrolling again
+    // Disable pointer interactions for popup while hidden
+    popup.style.pointerEvents = 'none';
+
+    // Stop typing animation timeouts
+    clearTyping();
+
+    // Re-enable background scroll
     document.body.style.overflow = 'auto';
+
+    // Delay removing 'open' so the closing animation can play smoothly
+    // Match this delay to your flap transition duration (CSS: transition: transform 1.2s)
+    // We'll use a shorter delay (400ms) so it feels snappy but not instant.
+    setTimeout(() => {
+      flap.classList.remove('open');
+    }, 400);
+  }
+
+  // Envelope click flap + popup (use openPopup)
+  envelope.addEventListener('click', () => {
+    openPopup();
+  });
+
+  // Close popup when overlay clicked
+  overlay.addEventListener('click', () => {
+    closePopup();
+  });
+
+  // Also allow pressing Escape to close the popup
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && popup.classList.contains('show')) {
+      closePopup();
+    }
   });
 
   // Confetti
@@ -105,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
       confetti.style.backgroundColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
       document.body.appendChild(confetti);
 
-      let falling = setInterval(() => {
+      const falling = setInterval(() => {
         const top = parseFloat(confetti.style.top);
         confetti.style.top = (top + Math.random() * 5 + 2) + 'px';
         confetti.style.left = (parseFloat(confetti.style.left) + Math.random() * 4 - 2) + 'px';
